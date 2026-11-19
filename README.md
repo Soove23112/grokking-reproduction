@@ -2,6 +2,14 @@
 
 Nanda, Chan, Lieberum, Smith and Steinhardt, ICLR 2023: [arXiv 2301.05217](https://arxiv.org/abs/2301.05217). Authors' code: [progress-measures-paper](https://github.com/mechanistic-interpretability-grokking/progress-measures-paper).
 
+- **Grokking and its mechanism reproduce.** Trained from scratch, our model memorises by epoch 200 and generalises (>99% test accuracy) at epoch 6 800, using the same Fourier multiplication algorithm with 4 key frequencies instead of the authors' 5.
+- **On the authors' own weights our analysis gives the paper's numbers** (key frequencies, 433 single-frequency neurons, table 1). Five numbers do not reproduce: three ablations of section 4.4, the null-space loss and the cosine-fit share (96.1% against 95%), cause unknown.
+- **Weight decay sets the delay.** No seed generalises without it; the median jump comes at 21 500, 6 800 and 2 500 epochs for λ = 0.3, 1 and 3 (three seeds each). Paper and code also disagree in a few checkable places: the run is 50 000 epochs, not 40 000, and frequency 56 is never considered.
+
+![Loss and accuracy over training: train accuracy saturates almost at once, test accuracy jumps thousands of epochs later](figures/fig2_curves.png)
+
+*Left: train and test loss, ours (solid) and from the authors' published run (dashed, dotted). Right: accuracy of our model.*
+
 ## Result
 
 We reproduced the paper along three lines: our analysis code run on the authors' published weights, the same analysis on a model we trained from scratch, and two sweeps (weight decay and training fraction). The success criteria, the key-frequency rule and the sweep hypotheses were fixed before we trained our model; they are collected in [docs/preregistration.md](docs/preregistration.md).
