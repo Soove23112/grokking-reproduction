@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+runs/
+data/
+dist/
+*.log
+figures/*.pdf
+viz/
