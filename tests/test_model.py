@@ -59,3 +59,15 @@ def test_accuracy_ignores_the_logit_of_equals():
     logits[1, -1, 3] = 1.0
     assert ref.accuracy(logits, torch.tensor([7, 3])) == 1.0
     assert ref.accuracy(logits, torch.tensor([7, 4])) == 0.5
+
+
+def test_relabel_tokens_makes_the_relabeled_model_equivalent():
+    """Model with tokens renamed x -> 7x, fed renamed inputs, gives the original logits at the renamed answers."""
+    m = ref.init_weights(ref.Transformer(), 3).double()
+    r = ref.relabel_tokens(ref.init_weights(ref.Transformer(), 3).double(), 7)
+    x, _ = ref.all_pairs()
+    rx = torch.stack([x[:, 0] * 7 % 113, x[:, 1] * 7 % 113, x[:, 2]], dim=1)
+    out = torch.arange(114)
+    out[:113] = out[:113] * 7 % 113
+    assert torch.allclose(r(rx)[:, -1, out], m(x)[:, -1], rtol=0, atol=1e-12)
+    assert torch.equal(r.W_E[113], m.W_E[113])

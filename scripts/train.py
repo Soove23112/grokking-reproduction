@@ -55,6 +55,7 @@ def parse_args():
     ap.add_argument("--device", default="mps" if torch.backends.mps.is_available() else "cpu")
     ap.add_argument("--eval-every", type=int, default=100)
     ap.add_argument("--save-every", type=int, default=100, help="0 disables checkpoints")
+    ap.add_argument("--relabel", type=int, default=1, help="rename numbers x -> u*x mod 113 in data and init")
     ap.add_argument("--stop-test-loss", type=float, default=0.0, help="stop once test loss is below this (0: never)")
     return ap.parse_args()
 
@@ -68,8 +69,8 @@ def main():
     json.dump({**vars(args), "torch": torch.__version__}, open(out / "config.json", "w"), indent=2)
 
     cfg = dict(epochs=args.epochs, lr=args.lr, weight_decay=args.wd, frac=args.frac,
-               data_seed=args.data_seed, device=args.device, eval_every=args.eval_every)
-    model = gm.init_weights(gm.Transformer(), args.init_seed)
+               data_seed=args.data_seed, device=args.device, eval_every=args.eval_every, relabel=args.relabel)
+    model = gm.relabel_tokens(gm.init_weights(gm.Transformer(), args.init_seed), args.relabel)
     log = MetricsLog(out / "metrics.csv", args.stop_test_loss)
 
     def save(epoch, sd):

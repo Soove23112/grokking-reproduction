@@ -24,8 +24,11 @@ MATRICES = ["W_E", "W_pos", "W_Q", "W_K", "W_V", "W_O", "W_in", "W_out", "W_U"]
 
 
 # ---------------------------------------------------------------- data
-def make_data(p=P, frac=0.3, data_seed=0):
+def make_data(p=P, frac=0.3, data_seed=0, relabel=1):
     """All pairs (a, b), shuffled exactly as the authors do; the first `frac` are the training set.
+
+    relabel = u renames every number x to u*x mod p after the split (u coprime to p), so the
+    training set becomes {(u*a, u*b)}: the same task, with numbers under new names.
 
     Returns (train_x, train_y, test_x, test_y): x is a LongTensor (N, 3) of tokens a, b, =;
     y is a LongTensor (N,) with (a + b) mod p.
@@ -35,6 +38,7 @@ def make_data(p=P, frac=0.3, data_seed=0):
     random.shuffle(pairs)
     div = int(frac * len(pairs))
     x = torch.tensor(pairs, dtype=torch.long)
+    x[:, :2] = x[:, :2] * relabel % p
     y = (x[:, 0] + x[:, 1]) % p
     return x[:div], y[:div], x[div:], y[div:]
 
@@ -128,6 +132,18 @@ def init_weights(model, init_seed=0):
     return model
 
 
+def relabel_tokens(model, u, p=P):
+    """Rename numbers x -> u*x mod p inside the weights: the row of W_E and the column of W_U that
+    belonged to x move to u*x; "=" stays. Together with make_data(relabel=u) this is the same
+    training run under new names, so key frequency k must become k * u^-1 mod p."""
+    src = torch.arange(D_VOCAB)
+    src[:p] = torch.arange(p) * pow(u, -1, p) % p     # new token x' holds old token u^-1 x'
+    with torch.no_grad():
+        model.W_E.copy_(model.W_E[src])
+        model.W_U.copy_(model.W_U[:, src])
+    return model
+
+
 def load_authors(model, sd):
     """Load a state_dict in the authors' naming and layout into our model."""
     a = "blocks.0.attn."
@@ -189,7 +205,7 @@ def train(model, cfg, log=None, save=None):
     Returns the list of training losses, one per epoch.
     """
     dev = cfg.get("device", "cpu")
-    tx, ty, vx, vy = make_data(P, cfg.get("frac", 0.3), cfg.get("data_seed", 0))
+    tx, ty, vx, vy = make_data(P, cfg.get("frac", 0.3), cfg.get("data_seed", 0), cfg.get("relabel", 1))
     tx, vx = tx.to(dev), vx.to(dev)
     model.to(dev)
     opt, sched = make_optimizer(model, cfg.get("lr", 1e-3), cfg.get("weight_decay", 1.0))
