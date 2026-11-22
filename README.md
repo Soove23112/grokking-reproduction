@@ -1,18 +1,45 @@
-# Reproducing "Progress measures for grokking via mechanistic interpretability"
+# Grokking: a reproduction of Nanda et al. 2023 and an early edit that shortens it
 
 Nanda, Chan, Lieberum, Smith and Steinhardt, ICLR 2023: [arXiv 2301.05217](https://arxiv.org/abs/2301.05217). Authors' code: [progress-measures-paper](https://github.com/mechanistic-interpretability-grokking/progress-measures-paper).
 
+## Main result
+
+In the setup of Nanda et al. (2023), grokking can be shortened about 18-fold by one edit early in training. At epoch 100, thousands of epochs before the jump, we replace the number embeddings W_E by their projection onto the 4 frequencies that are largest in W_E at that moment, and train on. In 5 of 5 initialisations the model then reaches 99% test accuracy a median 18 times sooner. Most of this comes from projecting onto a few Fourier frequencies at all: 4 random frequencies, rescaled to the same norm and applied to the same saved state, give a median factor of 10.9. The model's own early choice adds a median factor of 1.59 on top (faster in 5 of 5, range 1.10 to 1.80). Both experiments were pre-registered; the second, with random frequencies of equal norm, was written after the first, when the runs without the edit and with the model's own frequencies were already known, so only the random-frequency runs were new.
+
+| init | no change | own 4 frequencies | random 4, equal norm |
+|---|---|---|---|
+| 0 | 6 660 | 370 | 610 |
+| 1 | 5 100 | 440 | 700 |
+| 2 | 8 100 | 390 | 500 |
+| 3 | 8 590 | 460 | 830 |
+| 4 | 8 150 | 490 | 540 |
+
+*First epoch with test accuracy above 99%; all three runs of a row continue from one saved state at epoch 100.*
+
+In the logits, the projected models end up as the normal ones do, and get there in the same order, only faster and with a much shorter memorisation phase. On their final weights, keeping only the key-frequency terms cos/sin(w_k(a+b)) of the logits leaves the loss as low as that of the full model, and removing them raises the training loss to 5.9 to 27.6. As in normal training, this restricted loss falls before the test loss: below 0.1 at epochs 170 to 230 with the model's own frequencies and 240 to 500 with random ones, against 3 800 to 7 400 without the edit. Unlike normal training, the fit of the training pairs depends on the key-frequency terms early: at epoch 200, removing them raises the training loss to 5 to 11 after the edit, but only to 0.06 to 0.10 without it.
+
+**Conditions.** Task a + b mod 113; the paper's one-layer transformer (226 816 parameters) and split (30% of the pairs for training); AdamW with learning rate 10⁻³ and weight decay 1, full batch, CPU. Five initialisation seeds. The edit happens once, at epoch 100. W_E[:113] is projected onto the constant and the cos/sin of 4 frequencies, chosen as the 4 largest in W_E at that epoch, with no knowledge of the final model. The random control takes 4 other frequencies and rescales the result to the same norm. The metric is the first epoch with test accuracy above 99%, checked every 10 epochs.
+
+**What remains uncertain.**
+
+- The logit scale. The projection shrinks W_E to about a third of its norm, and the logits with it. Shrinking W_E by the same factor without the projection gives only 1.2×, but no control holds the logit scale equal to that after the projection. Part of the speed-up may therefore be an effect of output temperature rather than of the Fourier support.
+- Generality. Five initialisations, one data split, one task and model, one edit epoch and one number of frequencies. Nothing was tested beyond this setup.
+- Fourier or just low rank. The claim that most of the speed-up comes from the Fourier projection lacks a one-off control onto a non-Fourier subspace of the same dimension and norm. The only low-rank controls are single pilot runs with the projection re-applied after every step, and those never grokked.
+- Novelty. That a Fourier embedding on arbitrary frequencies speeds training up has a precedent: in section 2.1 of GrokTransfer a fixed Fourier embedding on frequencies that are not the model's own removes the delay. What we add is the choice made inside the run at epoch 100, and the comparison of own and random frequencies of equal norm from one state. We found no work that does this, which is a search result, not proof.
+- Why the model's own frequencies are faster we do not know. Under a projection re-applied after every step, random frequencies were sometimes more than twice as fast as the model's own.
+
+## Reproduction in brief
+
 - **Grokking and its mechanism reproduce.** Trained from scratch, our model memorises by epoch 200 and generalises (>99% test accuracy) at epoch 6 800, using the same Fourier multiplication algorithm with 4 key frequencies instead of the authors' 5.
 - **On the authors' own weights our analysis gives the paper's numbers** (key frequencies, 433 single-frequency neurons, table 1). Five numbers do not reproduce: three ablations of section 4.4, the null-space loss and the cosine-fit share (96.1% against 95%), cause unknown.
-- **Weight decay sets the delay.** No seed generalises without it; the median jump comes at 21 500, 6 800 and 2 500 epochs for λ = 0.3, 1 and 3 (three seeds each). Paper and code also disagree in a few checkable places: the run is 50 000 epochs, not 40 000, and frequency 56 is never considered.
-- **Which frequencies a model uses is largely visible in the embedding long before the jump; the neurons commit to them only around the jump.** In 19 new models the final key frequencies are all among the 9 largest of 56 frequencies of the embedding by epoch 500, while the test jump comes at 3 400 to 11 100. The paper's split appears to favour some frequencies: in a pre-registered test, frequency 7 was a key frequency in 3 of 8 new seeds, against about 1.5% probability if all frequencies were equally likely. A run with every number renamed shows that our code treats all numbers alike.
-- **Projecting the embedding onto a few frequencies at epoch 100 speeds grokking up 11- to 18-fold.** Projecting it onto its own 4 largest frequencies cut the epochs to 99% test accuracy by a median factor of 18 in 5 of 5 initialisations (pre-registered). From the same saved state, 4 random frequencies of equal norm gave a factor of 10.9, so the model's own choice adds about 1.6 on top. A control that holds the logit scale fixed is still missing.
+- **Weight decay sets the delay.** No seed generalises without it; the median jump comes at 21 500, 6 800 and 2 500 epochs for λ = 0.3, 1 and 3 (three seeds each). The numbers in appendix D.1 appear to have the values for λ = 0.3 and 3 swapped. Paper and code also disagree in a few checkable places: the run is 50 000 epochs, not 40 000, and frequency 56 is never considered.
+- **Which frequencies a model uses is visible in the embedding long before the jump; the neurons commit to them only around the jump.** In 19 new models the final key frequencies are all among the 9 largest of 56 frequencies of the embedding by epoch 500, while the test jump comes at 3 400 to 11 100. The paper's split appears to favour some frequencies: in a pre-registered test, frequency 7 was a key frequency in 3 of 8 new seeds, against about 1.5% probability if all frequencies were equally likely.
 
 ![Loss and accuracy over training: train accuracy saturates almost at once, test accuracy jumps thousands of epochs later](figures/fig2_curves.png)
 
 *Left: train and test loss, ours (solid) and from the authors' published run (dashed, dotted). Right: accuracy of our model.*
 
-## Result
+## All results
 
 We reproduced the paper along three lines: our analysis code run on the authors' published weights, the same analysis on a model we trained from scratch, and two sweeps (weight decay and training fraction). We then went beyond the paper: how the key frequencies are chosen across seeds and over training, and whether that choice can be used to speed grokking up. The success criteria, the key-frequency rule and the sweep hypotheses were fixed before we trained our model; they are collected in [docs/preregistration.md](docs/preregistration.md).
 
@@ -30,7 +57,7 @@ Across 19 further models with different initialisation and data seeds, every run
 
 Exploratory measurements on the saved weights add a time line. The frequencies stand out in the embedding early (in the main model by epoch 60, from an almost flat start; in most runs well before the jump), but neurons commit to single frequencies only around the test jump; in some runs an extra frequency becomes key for a while and is then removed, as in the paper's cleanup phase. The initial state predicts the winners only in part: a per-neuron lottery in the style of He et al. (2026) barely beats chance, and the best whole-model score puts about half of the final key frequencies among the top 10 of 56.
 
-The early choice can be used. In two pre-registered experiments we projected the embedding at epoch 100 onto a few of its frequencies. Onto its own 4 largest, the model reached 99% test accuracy a median 18 times sooner (5 of 5 initialisations); shrinking the embedding by the same factor without the projection gave 1.2. From a shared saved state, 4 random frequencies of the same norm gave 10.9, and the model's own frequencies were faster in 5 of 5, by a median factor of 1.59. Four of the six hypotheses of the first experiment held and both of the second.
+The early choice can be used: projecting the embedding at epoch 100 onto a few of its frequencies shortens grokking (see the main result above and the two sections on the projection). Four of the six hypotheses of the first projection experiment held and both of the second.
 
 Not every number matches. On the authors' weights every structural claim matches exactly: the key frequencies, the 433 single-frequency neurons, the 44 neurons of frequency 14, table 1 to a tenth of a percent, and the section 4.4 ablation that keeps only the 40 key-frequency components of the logits (7.24·10⁻⁸, as in the paper). Three other ablation numbers of section 4.4 do not reproduce (replacing neurons by their frequency polynomial, the "strict" neuron ablation, and projecting onto the 10 directions of W_L), nor does the claim that projecting onto the null space of those directions gives a loss "worse than chance": we get 3.98 against the chance level of 4.73, although the network is broken either way.
 
@@ -294,7 +321,11 @@ Both hypotheses held. The model's own frequencies were faster than random ones o
 
 So most of the speed-up comes from projecting onto a few Fourier frequencies at all. Choosing the model's own frequencies adds a factor of about 1.6 on top. The earlier estimate of 2.3 (18.0 / 7.7, a ratio of two medians over runs trained separately) was inflated by the smaller norm of the random projection.
 
-What happens at the projection was recorded without a prediction. On every initialisation training accuracy falls from 43–46% to 2–4% with `top4` and to 2–3% with `rand4n`, and the test loss falls from about 7.5 to 5.3–5.4 (`top4`) and 5.4–5.5 (`rand4n`). That is still worse than uniform guessing (ln 113 = 4.73). The projection mostly removes the confident wrong answers of the memorising solution rather than producing a generalising one at once. The pre-registration also planned restricted and excluded loss on the saved weights after the projection; we did not compute them.
+What happens at the projection was recorded without a prediction. On every initialisation training accuracy falls from 43–46% to 2–4% with `top4` and to 2–3% with `rand4n`, and the test loss falls from about 7.5 to 5.3–5.4 (`top4`) and 5.4–5.5 (`rand4n`). That is still worse than uniform guessing (ln 113 = 4.73). The projection mostly removes the confident wrong answers of the memorising solution rather than producing a generalising one at once.
+
+The pre-registration also planned the restricted and excluded loss on the saved weights (every 10 epochs up to epoch 400, every 100 after), for the projected frequencies and for the final key frequencies of each run, to be reported only after checking that they remain meaningful when the two sets differ (`scripts/steer_shared_mechanism.py`, [results/steer_shared_mechanism.md](results/steer_shared_mechanism.md), all values in `results/steer_shared_mechanism.csv`). The check passes. This criterion was not fixed in the plan; we take it as the restricted loss on the final keys being close to the loss of the full model and the excluded loss being far above it, on the final weights. On the final weights of all 15 runs the restricted loss on the final key frequencies is 8·10⁻⁹ to 2.5·10⁻⁷, as low as the training loss of the full model, and the excluded loss is 5.9 to 27.6. After a projection the final key frequencies are a subset of the projected ones, and the restricted losses on the two sets agree within 10%, the excluded losses within 0.05. Over the whole trajectory the projected set gives the same order of events: its restricted loss falls below 0.1 at epochs 170 to 210 (`top4`) and 230 to 500 (`rand4n`), before the test loss. On `none` they differ where the top 4 at epoch 100 missed final keys (inits 1, 3, 4: restricted loss on the projected set 0.017 to 0.70).
+
+The measures show the same order of events as in normal training, compressed. The restricted loss on the final keys falls below 0.1 before the test loss does: at epochs 170 to 230 against 330 to 500 for `top4`, 240 to 500 against 500 to 800 for `rand4n`, 3 800 to 7 400 against 5 000 to 8 500 for `none`. The memorisation phase is much shorter but does not vanish: with random frequencies the training loss is below 0.1 by epochs 190 to 200, while the test loss at epoch 200 is still 1.6 to 5.0 and falls below 0.1 only at epochs 500 to 800. The difference is what the training fit depends on. Without the edit, at epoch 200 the training loss is 0.02 and removing the key-frequency terms raises it only to 0.06 to 0.10: the training pairs are fitted by something else. After the edit the training loss reaches 0.01 to 0.09 by epoch 200, and removing those terms raises it to 7.3 to 10.8 (`top4`) and 4.8 to 10.9 (`rand4n`). The training fit depends on the frequencies the model was given; that those terms alone suffice comes only later (at epoch 200 the restricted loss of `rand4n` is still 0.2 to 1.0). These measures use the final key frequencies, known only in hindsight, and they describe the logits, not the internal circuit; they do not tell why the model's own frequencies are faster.
 
 The obvious alternative explanation is not yet ruled out. The projection shrinks W_E to about a third of its norm and with it the scale of the logits, and Truong (2026, preprint, abstract only; the task is not named and the weight norm is clamped there) reports that the output temperature alone moves the grokking delay. Hampton et al. (2026, preprint) found over 960 runs that a Fourier initialisation does not explain the speed-ups they studied and could not separate the geometry of the output from its scale. Our `scale` control keeps the directions of W_E and shrinks it the same way, and gives only 1.2×, but it does not hold the logit scale equal to that after the projection. A control with matched logit scale is the next check.
 
@@ -329,14 +360,14 @@ A literature review written for this project (in Russian, [reports/Литобз�
 - We did not train beyond 40 000 epochs, so we cannot say whether 20% of the data groks later.
 - We could not find the code behind the section 4.4 ablations, so the mismatches there may come from a different definition rather than a different result.
 - We did not test dropout or other regularisers.
-- The projection experiments use five initialisations, one data split and one projection epoch (100). A control that holds the logit scale equal to that after the projection is missing, so part of the speed-up may come from the smaller output scale rather than the Fourier support. The restricted and excluded losses planned for the shared-state runs were not computed.
+- The projection experiments use five initialisations, one data split and one projection epoch (100). A control that holds the logit scale equal to that after the projection is missing, so part of the speed-up may come from the smaller output scale rather than the Fourier support.
 - The frequency-dynamics and lottery sections are exploratory. Of the seven lottery scores only the full one was fixed in advance; the finding that the input side alone predicts as well would have to be confirmed on new seeds. The seed-grid runs are saved every 500 epochs, which limits the timing of neuron commitment to about ±500 epochs.
 
 ## Open questions
 
 - Does the 18-fold speed-up survive a control with matched logit scale?
 - Which property of the paper's split favours frequency 7? The direct test is to rename only the data, with fresh initialisations: the preference should move from 7 and 14 to 1 and 2.
-- Does the projection onto random frequencies change what the network computes, or only which frequencies it uses? The restricted and excluded losses on the saved weights of the shared-state runs would answer this.
+- The restricted and excluded losses show that after the edit the training fit depends on the given frequencies early, but not why the model's own frequencies are faster than random ones. Candidates are the phases kept by the projection and the alignment with the output side W_L, which in the main model already favours its own frequencies at epoch 100.
 - Causal test of the two-level picture: seed a frequency into W_E at initialisation and check whether neurons commit to it.
 
 ## Repository layout
@@ -350,9 +381,9 @@ A literature review written for this project (in Russian, [reports/Литобз�
   - `curves.py`: training curves, ours and the authors'.
   - `sweeps.py`: the two sweep grids and their run names.
   - `paths.py`: every file location in one place.
-- `scripts/` holds the command-line entry points: `train.py`, `analyze.py`, `compare_with_paper.py`, `figures.py`, `summarize_wd_sweep.py`, `summarize_data_fraction.py`, `extra_checks.py`, `seeds_analysis.py`, `sweep.sh` for both sweep grids (`wd` or `frac`), `seeds.sh` and `seeds2.sh` for the seed grids, `frequency_dynamics.py` and `lottery.py` for the exploratory analyses, and `steer.py`, `steer_analysis.py`, `steer_shared.py`, `steer_shared_analysis.py` for the projection experiments.
+- `scripts/` holds the command-line entry points: `train.py`, `analyze.py`, `compare_with_paper.py`, `figures.py`, `summarize_wd_sweep.py`, `summarize_data_fraction.py`, `extra_checks.py`, `seeds_analysis.py`, `sweep.sh` for both sweep grids (`wd` or `frac`), `seeds.sh` and `seeds2.sh` for the seed grids, `frequency_dynamics.py` and `lottery.py` for the exploratory analyses, and `steer.py`, `steer_analysis.py`, `steer_shared.py`, `steer_shared_analysis.py`, `steer_shared_mechanism.py` for the projection experiments.
 - `tests/`: pytest suite, including the check of our code against the authors' recorded losses.
-- `results/`: snapshots (`*_snapshot.json`), trajectories of the progress measures (`*_trajectory.csv`), and the tables `comparison.md`, `sweep.md`, `data_fraction.md`, `seeds.md`, `frequency_dynamics.md`, `lottery.md`, `steer.md` and `steer_shared.md`, and the raw results of the projection runs (`steer.jsonl`, `steer_shared.jsonl`).
+- `results/`: snapshots (`*_snapshot.json`), trajectories of the progress measures (`*_trajectory.csv`), and the tables `comparison.md`, `sweep.md`, `data_fraction.md`, `seeds.md`, `frequency_dynamics.md`, `lottery.md`, `steer.md`, `steer_shared.md` and `steer_shared_mechanism.md`, and the raw results of the projection runs (`steer.jsonl`, `steer_shared.jsonl`, `steer_shared_mechanism.csv`).
 - `figures/`: report figures, numbered after the corresponding figures of the paper.
 - `docs/preregistration.md`: what was fixed before each experiment, section by section, with the date and what was known at the time.
 - `reports/`: the literature review behind "Relation to prior work", in Russian ([Литобзор по гроккингу](reports/Литобзор%20по%20гроккингу.md)); its source notes are in `research_notes/`.
@@ -408,6 +439,7 @@ uv run python scripts/steer_analysis.py         # -> results/steer.md
 for i in 0 1 2 3 4; do for c in none top4 rand4n; do
   uv run python scripts/steer_shared.py --init $i --cond $c; done; done
 uv run python scripts/steer_shared_analysis.py  # -> results/steer_shared.md
+uv run python scripts/steer_shared_mechanism.py # -> results/steer_shared_mechanism.md, .csv
 ```
 
 The file ID above is the one the authors' `helpers.py` passes to `gdown` in `download_model_from_drive`. If it stops working, take the current link from the authors' repository README. The copy we used is 456 428 905 bytes. It is a pickle and is loaded with `torch.load(..., weights_only=True)`. Several copies of `sweep.sh` can run in parallel: each run is claimed by creating `runs/.claims/<name>`, and claimed or existing runs are skipped.
